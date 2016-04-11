@@ -14,17 +14,42 @@ import requests
 import urllib2
 import gzip
 import struct
+WATCH_FOLDER = '/path/to/folder/'
+END_FOLDER = '/path/to/file/renamed' #The folder where the files renamed will be moved to following this standard: END_FOLDER/SERIES_NAME/SERIES_NAME S[SEASON]E[EPISODE].FILE_EXTENSION(mp4, avi or mkv)
+SUB_LANG = 'pob' #opensubtitle language to search. ex: all, en, por, pob, esp, fr etc...
+
+def path(path_string):
+	path_string=path_string.split('/')
+	path_list=path_string[:len(path_string)-1]
+	new_path_string=''
+	for folder in path_list[1:]:
+		new_path_string=new_path_string + '/' + folder
+	out=[new_path_string + '/', path_string[:len(path_string)]]
+	return out
 
 
 def log(message):
 	home= os.getenv('HOME')
-	arquivo=home+"/tvrenamer.log"
-	logfile = open(arquivo, 'r')
-	oldlog = logfile.read()
+	if os.path.exists(home+"/tvrenamer.log"):
+		working_file=home+"/tvrenamer.log"
+		logfile = open(working_file, 'w+')
+		oldlog = logfile.read()
+	else:
+		oldlog = '#Logfile TV Renamer\n'
 	newlog = oldlog + "-----------------------------------------------\n" + str(datetime.today().day) +"-"+ str(datetime.today().month)+"-"+ str(datetime.today().year)+"\t"+ str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second) +"\n" + message + "\n"
-	logfile = open(arquivo, 'w')
+	logfile = open(working_file, 'w')
 	logfile.write(newlog)
 	logfile.close()
+
+def file_not_in_use(f_to_test):
+	size = os.stat(f_to_test).st_size
+	time.sleep(1)
+	d_size = os.stat(f_to_test).st_size
+	while d_size != size:
+		size = os.stat(f_to_test).st_size
+		time.sleep(1)
+		d_size = os.stat(f_to_test).st_size
+	return True
 
 def hashFile(name): 
       try: 
@@ -73,7 +98,7 @@ def get_token():
    <value><string></string></value>
   </param>
   <param>
-   <value><string>pob</string></value>
+   <value><string>"""+ SUB_LANG + """</string></value>
   </param>
   <param>
    <value><string>SolEol 0.0.8</string></value>
@@ -81,20 +106,19 @@ def get_token():
  </params>
 </methodCall>"""
 	headers = {'Content-Type': 'text/xml'}
-	res = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
-	#print res
-	nres = res.split("\n")
-	cont=0
-	for var in nres:
+	answer = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
+	new_answer = answer.split("\n")
+	i=0
+	for var in new_answer:
 		if '<name>status</name>' in var:
-			op=nres[cont+2].replace('      <string>', '')
-			status=op.replace('</string>', '')
+			output=new_answer[i+2].replace('      <string>', '')
+			status=output.replace('</string>', '')
 			if status == '200 OK':
-				tk=nres[cont-4].replace('      <string>', '')
-				tk=tk.replace('</string>', '')
-				return tk
+				token=new_answer[i-4].replace('      <string>', '')
+				token=token.replace('</string>', '')
+				return token
 				break
-		cont=cont+1
+		i=i+1
 def download(name):
 	xml = """<?xml version="1.0"?>
 <methodCall>
@@ -127,65 +151,56 @@ def download(name):
  </params>
 </methodCall>"""
 	headers = {'Content-Type': 'text/xml'}
-	res = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
-	#print res
-	nres = res.split("\n")
-	cont=0
+	answer = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
+	new_answer = answer.split("\n")
+	i=0
 	exit=0
-	for var in nres:
+	for var in new_answer:
 		if '<name>SubDownloadLink</name>' in var:
-			op=nres[cont+2].replace('            <string>', '')
-			url=op.replace('</string>', '')
+			output=new_answer[i+2].replace('            <string>', '')
+			url=output.replace('</string>', '')
 			file_name = name.replace('.mp4', '')
-			u = urllib2.urlopen(url)
-			f = open(file_name, 'wb')
-			f.write(u.read())
-			f.close()
+			download = urllib2.urlopen(url)
+			download_file = open(file_name, 'wb')
+			download_file.write(download.read())
+			download_file.close()
 			with gzip.open(file_name, 'rb') as f:
-	   			srt = open(file_name+".srt", 'wb')
+	   			srt = open(file_name + ".srt", 'wb')
 				srt.write(f.read())
 				srt.close()
 			os.remove(file_name)
 			exit=1
 			break
-		cont=cont+1
+		i=i+1
 	if exit==1:
-		log("legenda salva como: " + file_name + ".srt")
+		log("Subtitle saved as: " + file_name + ".srt")
 	else:
-		log("legenda não encontrada para " + name)
+		log("No subtitle found for " + name)
 
-os.chdir("/media/Arquivos/Episódios")
-address=os.listdir("/media/Arquivos/Episódios")
-lugar="/media/Arquivos/Episódios"
+os.chdir(WATCH_FOLDER)
+list_of_files=os.listdir(WATCH_FOLDER)
+watch_folder=WATCH_FOLDER
 while True:
 	time.sleep(1)
-	if len(address) == 0 and os.getcwd()!="/media/Arquivos/Episódios":
-		torem=os.getcwd()
-		#print "AquiQ"
-		os.chdir("/media/Arquivos/Episódios")
-		os.rmdir(torem)
-		address=os.listdir("/media/Arquivos/Episódios")
+	if len(list_of_files) == 0 and os.getcwd()!=WATCH_FOLDER:
+		to_remove=os.getcwd()
+		os.chdir(WATCH_FOLDER)
+		os.rmdir(to_remove)
+		list_of_files=os.listdir(WATCH_FOLDER)
 		continue
-	for arquivo in address:
-		if os.path.isdir(arquivo):
-			lugar=arquivo
+	for working_file in list_of_files:
+		if os.path.isdir(working_file):
+			watch_folder=working_file
 			continue
-		if not arquivo.lower().endswith(('.mp4', '.mkv', '.avi')):
-			os.remove(arquivo)
+		if not working_file.lower().endswith(('.mp4', '.mkv', '.avi')):
+			os.remove(working_file)
 			continue
-		#if arquivo.count('/') > 1:
-		arquivo=arquivo.split('/')
-		dirw=arquivo[:len(arquivo)-1]
-		dirw = str(dirw)
-		dirw = dirw.replace("[\'", "/")
-		dirw = dirw.replace("\', \'", "/")
-		dirw = dirw.replace("\']", "/")
-		dirw = dirw.replace("[]", "")
-		arquivo=arquivo[len(arquivo)-1]
-		if arquivo.count('.') > 1:
-			string = arquivo.split('.')
+		f_path=path(working_file)[0]
+		working_file=path(working_file)[1]
+		if working_file.count('.') > 1:
+			string = working_file.split('.')
 		else:
-			string = arquivo.split()
+			string = working_file.split()
 			aux=string[len(string)-1]
 			string.pop(len(string)-1)
 			string.extend(aux.split('.'))
@@ -195,45 +210,42 @@ while True:
 			codex=1
 		if codex==0:
 			continue
-		if not os.path.exists(dirw + arquivo):
-			log(arquivo + " não existe!\nVerifique a localização do arquivo e tente novamente.")
+		if not os.path.exists(dirw + working_file):
+			log(working_file + " não existe!\nVerifique a localização do arquivo e tente novamente.")
 			continue
-		path = "/media/Arquivos/icaronascimento/Series/"
-		cont=0
-		conttt=0
+		path = END_FOLDER
+		i=0
+		i2=0
 		flag=0
 		seriename = []
 		for var in string:
 			##print var + " nada"
 			if re.match("[a-zA-Z0-9]+$", var):
-				seriename.append(string[conttt])
+				seriename.append(string[i2])
 				##print seriename
-			conttt=conttt+1
+			i2=i2+1
 		for var in seriename:
-			cont=cont+1
+			i=i+1
 			if re.match("[A-z][0-9]", var):
-				##print var
 				break
 			if re.match("[0-9]", var):
-				flag=1		
-				##print var
+				flag=1
 				break
-		##print seriename[:cont-1]
 		if flag==1:
-			if len(string[cont-1][1:])>2:
-				epi="E"+seriename[cont-1][2:]
-				temp=" S"+seriename[cont-1][:2]
+			if len(string[i-1][1:])>2:
+				epi="E"+seriename[i-1][2:]
+				temp=" S"+seriename[i-1][:2]
 			else:
-				epi="E"+seriename[cont-1][1:]
-				temp=" S0"+seriename[cont-1][:1]
+				epi="E"+seriename[i-1][1:]
+				temp=" S0"+seriename[i-1][:1]
 		else:
-			epi=seriename[cont-1][3:].title()
-			temp=" " +seriename[cont-1][:3].title()
+			epi=seriename[i-1][3:].title()
+			temp=" " +seriename[i-1][:3].title()
 		##print epi
 		##print temp	
 		t=Tvdb()
 		oc=0
-		h1 = str(seriename[:cont-1])
+		h1 = str(seriename[:i-1])
 		h1 = h1.replace("[\'", "")
 		h1 = h1.replace("\', \'", " ")
 		h1 = h1.replace("\']", "")
@@ -251,14 +263,12 @@ while True:
 			fl=d+sn
 		    	if not os.path.exists(d):
 		        	os.makedirs(d)
-			##print arquivo
-			shutil.move(arquivo, fl)
-			download(fl)
-			#sendmessage("TV Renamer", "Arquivo movido para " + fl)
+			if file_not_in_use(working_file):
+				shutil.move(working_file, fl)
+				download(fl)
 			log("Arquivo movido para " + fl)
 		else:
 			log("Série não encontrada" + h1)
-	#print os.getcwd()
-	if os.path.isdir(lugar):
-		os.chdir(lugar)
-	address=os.listdir(os.getcwd())
+	if os.path.isdir(watch_folder):
+		os.chdir(watch_folder)
+	list_of_files=os.listdir(os.getcwd())
