@@ -14,8 +14,8 @@ import requests
 import urllib2
 import gzip
 import struct
-WATCH_FOLDER = '/path/to/folder/'
-END_FOLDER = '/path/to/file/renamed' #The folder where the files renamed will be moved to following this standard: END_FOLDER/SERIES_NAME/SERIES_NAME S[SEASON]E[EPISODE].FILE_EXTENSION(mp4, avi or mkv)
+WATCH_FOLDER = '/path/to/folder'
+END_FOLDER = '/path/to/folder/' #The folder where the files renamed will be moved to following this standard: END_FOLDER/SERIES_NAME/SERIES_NAME S[SEASON]E[EPISODE].FILE_EXTENSION(mp4, avi or mkv)
 SUB_LANG = 'pob' #opensubtitle language to search. ex: all, en, por, pob, esp, fr etc...
 
 def path(path_string):
@@ -23,7 +23,10 @@ def path(path_string):
 	path_list=path_string[:len(path_string)-1]
 	new_path_string=''
 	for folder in path_list[1:]:
-		new_path_string=new_path_string + '/' + folder
+		if folder=='':
+			continue
+		else:
+			new_path_string=new_path_string + '/' + folder
 	out=[new_path_string + '/', path_string[:len(path_string)]]
 	return out
 
@@ -196,7 +199,10 @@ while True:
 			os.remove(working_file)
 			continue
 		f_path=path(working_file)[0]
-		working_file=path(working_file)[1]
+		if f_path == '/':
+			f_path=''
+		working_file=path(working_file)[1][0]
+		#print working_file
 		if working_file.count('.') > 1:
 			string = working_file.split('.')
 		else:
@@ -210,7 +216,8 @@ while True:
 			codex=1
 		if codex==0:
 			continue
-		if not os.path.exists(dirw + working_file):
+		#print f_path
+		if not os.path.exists(f_path + working_file):
 			log(working_file + " não existe!\nVerifique a localização do arquivo e tente novamente.")
 			continue
 		path = END_FOLDER
