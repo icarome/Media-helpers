@@ -3,14 +3,11 @@
 import sys
 import os
 import re
-from tvdb_api import Tvdb
-from tvdb_exceptions import tvdb_shownotfound
 import array
 import shutil
 from datetime import datetime
 import time
 from subprocess import Popen, PIPE
-import requests
 import urllib2
 import gzip
 import struct
@@ -18,16 +15,49 @@ WATCH_FOLDER = '/path/to/folder'
 END_FOLDER = '/path/to/folder/' #The folder where the files renamed will be moved to following this standard: END_FOLDER/SERIES_NAME/SERIES_NAME S[SEASON]E[EPISODE].FILE_EXTENSION(mp4, avi or mkv)
 SUB_LANG = 'pob' #opensubtitle language to search. ex: all, en, por, pob, esp, fr etc...
 
-def path(path_string):
-	path_string=path_string.split('/')
-	path_list=path_string[:len(path_string)-1]
-	new_path_string=''
-	for folder in path_list[1:]:
-		if folder=='':
-			continue
+def get_path(path_string):
+		path_string=path_string.split('/')
+		path_list=path_string[:len(path_string)-1]
+		out=[]
+		if not path_list:
+			path=os.getcwd() + '/'
+			filename=path_string[-1]
 		else:
-			new_path_string=new_path_string + '/' + folder
-	out=[new_path_string + '/', path_string[:len(path_string)]]
+			new_path_string=[]
+			for folder in path_list:
+				if folder=='':
+					out.extend(['/'])
+					continue
+				else:
+					out.extend([folder])
+			path = ''
+			for folder in out:
+				if not folder == '/':			
+					path=path + folder + '/'
+				else:
+					path=path + folder
+			filename=path_string[-1]
+		return [path, filename]
+
+def conf_name(name):
+	a = 'http://thetvdb.com/api/GetSeries.php?seriesname='
+	b = urllib2.quote(name)
+	data = a + b
+	answer = urllib2.urlopen(data).read()
+	new_answer = answer.split("\n")
+	out = ''
+	exit = 0
+	for line in new_answer:
+		if '<SeriesName>' in line:
+	        	for l in line[12:]:
+			      	if not '<' in l:
+	                		out = out + l
+	        		else:
+	                        	exit=1
+	                             	break
+	             	if exit == 1:
+	                	break
+		
 	return out
 
 
@@ -35,12 +65,12 @@ def log(message):
 	home= os.getenv('HOME')
 	if os.path.exists(home+"/tvrenamer.log"):
 		working_file=home+"/tvrenamer.log"
-		logfile = open(working_file, 'w+')
+		logfile = open(working_file, 'r+')
 		oldlog = logfile.read()
 	else:
 		oldlog = '#Logfile TV Renamer\n'
 	newlog = oldlog + "-----------------------------------------------\n" + str(datetime.today().day) +"-"+ str(datetime.today().month)+"-"+ str(datetime.today().year)+"\t"+ str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second) +"\n" + message + "\n"
-	logfile = open(working_file, 'w')
+	logfile = open(working_file, 'w+')
 	logfile.write(newlog)
 	logfile.close()
 
@@ -90,26 +120,13 @@ def hashFile(name):
                 return "IOError"
 
 def get_token():
-	xml = """<?xml version="1.0"?>
-<methodCall>
- <methodName>LogIn</methodName>
- <params>
-  <param>
-   <value><string></string></value>
-  </param>
-  <param>
-   <value><string></string></value>
-  </param>
-  <param>
-   <value><string>"""+ SUB_LANG + """</string></value>
-  </param>
-  <param>
-   <value><string>SolEol 0.0.8</string></value>
-  </param>
- </params>
-</methodCall>"""
+	xml = """<?xml version="1.0"?>\n<methodCall>\n\t<methodName>LogIn</methodName>\n
+\t<params>\n\t\t<param>\n\t\t\t<value><string></string></value>\n\t\t</param>\n\t\t<param>\n\t\t\t<value><string></string></value>\n
+\t\t</param>\n\t\t<param>\n\t\t\t<value><string>"""+ SUB_LANG + """</string></value>\n\t\t</param>\n\t\t<param>\n\t\t\t<value><string>SolEol 0.0.8</string></value>\n\t\t</param>\n\t</params>\n</methodCall>"""
 	headers = {'Content-Type': 'text/xml'}
-	answer = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
+	answer = urllib2.Request('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers)
+	answer = urllib2.urlopen(answer)
+	answer = answer.read()
 	new_answer = answer.split("\n")
 	i=0
 	for var in new_answer:
@@ -122,39 +139,13 @@ def get_token():
 				return token
 				break
 		i=i+1
+
+
 def download(name):
-	xml = """<?xml version="1.0"?>
-<methodCall>
- <methodName>SearchSubtitles</methodName>
- <params>
-  <param>
-   <value><string>"""+get_token()+"""</string></value>
-  </param>
-  <param>
-   <value>
-    <array>
-     <data>
-      <value>
-       <struct>
-        <member>
-         <name>sublanguageid</name>
-         <value><string>pob</string>
-         </value>
-        </member>
-        <member>
-         <name>moviehash</name>
-         <value><string>"""+hashFile(name)+"""</string></value>
-        </member>
-       </struct>
-      </value>
-     </data>
-    </array>
-   </value>
-  </param>
- </params>
-</methodCall>"""
+	xml = """<?xml version="1.0"?>\n<methodCall>\n\t<methodName>SearchSubtitles</methodName>\n\t<params>\n\t\t<param>\n\t\t\t<value><string>"""+get_token()+"""</string></value>\n\t\t</param>\n\t\t<param>\n\t\t\t<value>\n\t\t\t\t<array>\n\t\t\t\t\t<data>\n\t\t\t\t\t\t<value>\n\t\t\t\t\t\t\t<struct>\n\t\t\t\t\t\t\t\t<member>\n\t\t\t\t\t\t\t\t\t<name>sublanguageid</name>\n\t\t\t\t\t\t\t\t\t\t<value><string>pob</string></value>\n\t\t\t\t\t\t\t\t</member>\n\t\t\t\t\t\t\t\t<member>\n\t\t\t\t\t\t\t\t\t<name>moviehash</name>\n\t\t\t\t\t\t\t\t\t\t<value><string>"""+hashFile(name)+"""</string></value>\n\t\t\t\t\t\t\t\t</member>\n\t\t\t\t\t\t\t</struct>\n\t\t\t\t\t\t</value>\n\t\t\t\t\t</data>\n\t\t\t\t</array>\n\t\t\t</value>\n\t\t</param>\n\t</params>\n</methodCall>"""
 	headers = {'Content-Type': 'text/xml'}
-	answer = requests.post('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers).text
+	answer = urllib2.Request('http://api.opensubtitles.org/xml-rpc', data=xml, headers=headers)
+	answer = urllib2.urlopen(answer).read()
 	new_answer = answer.split("\n")
 	i=0
 	exit=0
@@ -180,6 +171,7 @@ def download(name):
 	else:
 		log("No subtitle found for " + name)
 
+
 os.chdir(WATCH_FOLDER)
 list_of_files=os.listdir(WATCH_FOLDER)
 watch_folder=WATCH_FOLDER
@@ -198,25 +190,24 @@ while True:
 		if not working_file.lower().endswith(('.mp4', '.mkv', '.avi')):
 			os.remove(working_file)
 			continue
-		f_path=path(working_file)[0]
-		if f_path == '/':
-			f_path=''
-		working_file=path(working_file)[1][0]
+		f_path=get_path(working_file)[0]
+		#if f_path == '/':
+		#	f_path=''
+		working_file=get_path(working_file)[1]
 		#print working_file
 		if working_file.count('.') > 1:
 			string = working_file.split('.')
 		else:
 			string = working_file.split()
-			aux=string[len(string)-1]
-			string.pop(len(string)-1)
-			string.extend(aux.split('.'))
-		tam=len(string)
+			file_ext=string[-1]
+			string.pop(-1)
+			string.extend(file_ext.split('.'))
+		
 		codex=0
-		if string[tam-1] == "mp4" or string[tam-1] == "mkv" or string[tam-1] == "avi" :
+		if string[-1] == "mp4" or string[-1] == "mkv" or string[-1] == "avi" :
 			codex=1
 		if codex==0:
 			continue
-		#print f_path
 		if not os.path.exists(f_path + working_file):
 			log(working_file + " não existe!\nVerifique a localização do arquivo e tente novamente.")
 			continue
@@ -248,25 +239,15 @@ while True:
 		else:
 			epi=seriename[i-1][3:].title()
 			temp=" " +seriename[i-1][:3].title()
-		##print epi
-		##print temp	
-		t=Tvdb()
-		oc=0
 		h1 = str(seriename[:i-1])
 		h1 = h1.replace("[\'", "")
 		h1 = h1.replace("\', \'", " ")
 		h1 = h1.replace("\']", "")
-		##print h1
-		try:
-			serie=t.search(h1)
-			a=1
-		except tvdb_shownotfound:
-			a=0
-		oc=oc+1
+		serie=conf_name(h1)
 		if len(serie)>=1:
-			sn=serie[0]['seriesname'] + temp + epi +"."+string[tam-1]
+			sn=serie + temp + epi +"."+string[-1]
 			exit=0
-			d=path+serie[0]['seriesname']+"/"
+			d=path+serie+"/"
 			fl=d+sn
 		    	if not os.path.exists(d):
 		        	os.makedirs(d)
