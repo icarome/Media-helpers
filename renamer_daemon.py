@@ -4,6 +4,8 @@ import media_helpers as mh
 import os
 import shutil
 import time
+import re
+from datetime import datetime
 WATCH_FOLDER = '/media/Arquivos/Episódios'
 END_FOLDER = '/media/Arquivos/icaronascimento/Series/' #The folder where the files renamed will be moved to following this standard: END_FOLDER/SERIES_NAME/SERIES_NAME S[SEASON]E[EPISODE].FILE_EXTENSION(mp4, avi or mkv)
 SUB_LANG = 'pob' #opensubtitle language to search. ex: all, en, por, pob, esp, fr etc...
@@ -31,7 +33,7 @@ while True:
 			if not working_file.lower().endswith(VIDEO_FILE_EXT):
 				os.remove(working_file)
 				continue
-			f_path=get_path(working_file)[0]
+			f_path=mh.get_path(working_file)[0]
 			working_file=mh.get_path(working_file)[1]
 			if working_file.count('.') > 1:
 				string = working_file.split('.')
@@ -43,16 +45,14 @@ while True:
 			if not os.path.exists(f_path + working_file):
 				mh.log("{0}\tMain: {1} não existe!\nVerifique a localização do arquivo e tente novamente.".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), working_file))
 				continue
+			mh.log("{0}\tmain: {1} encontrado. Organizando agora".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), working_file))
 			path = END_FOLDER
 			i=0
 			flag=0
 			seriename = []
 			for var in string:
 				if re.match("[a-zA-Z0-9]+$", var):
-					#seriename.append(string[i])
 					seriename.append(var)
-				#i+=1
-			#i=0
 			for var in seriename:
 				i=i+1
 				if re.match("[A-z][0-9]", var):
@@ -77,10 +77,10 @@ while True:
 			file_location=file_wd+file_name
 			if not os.path.exists(file_wd):
 			       	os.makedirs(file_wd)
-			if file_not_in_use(working_file):
+			if mh.file_not_in_use(working_file):
 				shutil.move(working_file, file_location)
 				mh.log("{0}\tMain: Arquivo movido para {1}".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), file_location))
-				mh.download(file_location)
+				mh.download(file_location, SUB_LANG)
 		if os.path.isdir(watch_folder):
 			os.chdir(watch_folder)
 		list_of_files=os.listdir(os.getcwd())
