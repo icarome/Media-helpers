@@ -11,6 +11,7 @@ from subprocess import Popen, PIPE
 import urllib2
 import gzip
 import struct
+import xml.etree.ElementTree as ET
 #------------------------------------------------------------------------------------------------#
 
 def log(message):
@@ -74,22 +75,14 @@ def conf_name(name):
 		except urllib2.URLError:
 			i+=1
 			log("{0}\tconf_name: Erro de conexão com internet. Tentativa {1} de 3".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), i))
-	if i==2:		
+	if i==3:		
 		return name
-	new_answer = answer.split("\n")
+	new_answer = answer
 	out = ''
 	exit = 0
-	for line in new_answer:
-		if '<SeriesName>' in line:
-	        	for l in line[12:]:
-			      	if not '<' in l:
-	                		out = out + l
-	        		else:
-	                        	exit=1
-	                             	break
-	             	if exit == 1:
-	                	break
-		
+	root = ET.fromstring(new_answer)
+	for n in root.iter('SeriesName'):
+		out = n.text
 	return out
 
 #------------------------------------------------------------------------------------------------#
@@ -162,19 +155,16 @@ def get_token(sub_lang):
 			i+=1
 			log("{0}\tget_token: Erro ao adquirir token {1} de 3. Tentando novamente.".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), i))
 			time.sleep(0.5)
-	if i == 2:	
+	if i == 3:	
 		return -1
-	new_answer = answer.split("\n")
+	new_answer = answer
 	i=0
-	for var in new_answer:
-		if '<name>status</name>' in var:
-			output=new_answer[i+2].replace('      <string>', '')
-			status=output.replace('</string>', '')
-			if status == '200 OK':
-				token=new_answer[i-4].replace('      <string>', '')
-				token=token.replace('</string>', '')
-				log("{0}\tget_token: Token adiquirido com sucesso".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second)))
-				return token
+	root = ET.fromstring(new_answer)
+	for n in root.iter('member'):
+		if n.find('name').text == 'token':
+			token = n.find('value').find('string').text
+			log("{0}\tget_token: Token adiquirido com sucesso".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second)))
+			return token
 		i=i+1
 
 #------------------------------------------------------------------------------------------------#
@@ -199,13 +189,13 @@ def download(name, lang):
 			log("{0}\tdownload: Erro ao buscar legenda {1} de 3. Tentando novamente em 2 segundos...".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), i))
 			time.sleep(2)
 			continue
-	new_answer = answer.split("\n")
+	new_answer = answer
 	i=0
 	exit=0
-	for var in new_answer:
-		if '<name>SubDownloadLink</name>' in var:
-			output=new_answer[i+2].replace('            <string>', '')
-			url=output.replace('</string>', '')
+	root = ET.fromstring(new_answer)
+	for n in root.iter('member'):
+		if n.find('name').text == 'SubDownloadLink':
+			url = n.find('value').find('string').text
 			file_name = name[:-4]
 			i=0			
 			while i<3:
@@ -232,4 +222,3 @@ def download(name, lang):
 		log("{0}\tdownload: Legenda salva como: {1}.srt".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), file_name))
 	else:
 		log("{0}\tdownload: Não foi possível baixar legenda para: {1}".format(str(datetime.today().hour) +":" + str(datetime.today().minute) +":" + str(datetime.today().second), name))
-
